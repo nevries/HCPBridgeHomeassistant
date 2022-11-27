@@ -14,45 +14,12 @@ Eigentlich war das Ziel, die Steuerung komplett nur mit einem ESP8266 zu realisi
 ## Funktionen:
 - Abrufen des aktuellen Status (Tor, Licht)
 - Auslösen der Aktionen (Licht an/aus, Tor öffen, schließen, stoppen sowie Lüftungsstellung
-- WebInterface
-- WebService
-- Schalten eines Relais mit der Beleuchtung
+
 
 ## WebInterface:
-![alt text](https://github.com/hkiam/HCPBridge/raw/master/Images/webinterface.PNG)
+![alt text](https://github.com/MCLW/HCPBridgeHomeassistant/blob/master/Images/Homeassistant.png)
 
-## WebService:
-### Aktion ausführen
 
-***http://[deviceip]/command?action=[id]***
-
-  
-| Action | Beschreibung |
-| --- | --- |
-| 0 | schließe Tor |
-| 1 | öffne Tor |
-| 2 | stoppe Tor |
-| 3 | Lüftungsstellung |
-| 4 | 1/2 öffnen |
-| 5 | Lampe an/an |  
-  
-
-### Status abfragen:
-
-***http://[deviceip]/status***
-  
-Response (JSON):
- ```
-{
-  "valid" : true,
-  "doorstate" : 1,
-  "doorposition" : 0,
-  "doortarget" : 0,
-  "lamp" : true,
-  "debug" : 0,
-  "lastresponse" : 0
-}
-```
 
 ## Pinout RS485 (Plug):
 ![alt text](https://github.com/hkiam/HCPBridge/raw/master/Images/plug-min.png)
