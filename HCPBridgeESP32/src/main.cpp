@@ -227,4 +227,9 @@ void setup(){
 //======================================================================================================================
 void loop(){     
   mqtt.loop();
+
+  if (WiFi.status() != WL_CONNECTED){
+    WiFi.disconnect();
+    WiFi.reconnect();
+  }
 }
