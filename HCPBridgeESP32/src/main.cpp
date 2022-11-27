@@ -1,68 +1,46 @@
 #include <Arduino.h>
-#include <AsyncElegantOTA.h>
-#include <ESPAsyncWebServer.h>
-#include "AsyncJson.h"
-#include "ArduinoJson.h"
+#include <WiFi.h>
 #include "hciemulator.h"
-#include "index_html.h"
-#include "../../WebUI/index_html.h"
+#include <ArduinoHA.h>
+#include <math.h>
 
-/* create this file and add your wlan credentials
+/* create this file and add your wlan and mqtt credentials
   const char* ssid = "MyWLANSID";
   const char* password = "MYPASSWORD";
+  const char* mqtt_username   = "USERNAME";
+  const char* mqtt_pass       = "PASSWORD";
+  const uint16_t mqtt_port    = 1883;
 */
 #include "../../../private/credentials.h"
 
+//#define DEBUG
 
-// switch relay sync to the lamp
-// e.g. the Wifi Relay Board U4648
-#define USERELAY
+//======================================================================================================================
+// HA Device Parameter
+//======================================================================================================================
+#define BROKER_ADDR IPAddress(192,168,178,50)
+WiFiClient client;
+HADevice device("Supramatic4");
+HAMqtt mqtt(client, device);
 
-// use alternative uart pins 
-//#define SWAPUART
+HACover garagedoor("garagedoor", HACover::PositionFeature);
+HAButton button("ventilation");
+HASwitch light("garagelight");
+HASensor hcistatus("hcistatus");
+HASensor doorstate("doorstate");
 
-#define RS485 Serial
+//======================================================================================================================
+// UART and HCI-Emulator Parameter
+//======================================================================================================================
+#define RS485 Serial2
+#define PIN_TXD 17 // UART 2 TXT - G17
+#define PIN_RXD 16 // UART 2 RXD - G16
 
-// Relay Board parameters
-#define ESP8266_GPIO2    2 // Blue LED.
-#define ESP8266_GPIO4    4 // Relay control.
-#define ESP8266_GPIO5    5 // Optocoupler input.
-#define LED_PIN          ESP8266_GPIO2
-
-
-// Hörmann HCP2 based on modbus rtu @57.6kB 8E1
 HCIEmulator emulator(&RS485);
 
-// webserver on port 80
-AsyncWebServer server(80);
-
-// called by ESPAsyncTCP-esphome:SyncClient.cpp (see patch) instead of delay to avoid connection breaks
-void DelayHandler(void){
-    emulator.poll();
-}
-
-// switch GPIO4 und GPIO2 sync to the lamp
-void onStatusChanged(const SHCIState& state){
-  //see https://ucexperiment.wordpress.com/2016/12/18/yunshan-esp8266-250v-15a-acdc-network-wifi-relay-module/
-  //Setting GPIO4 high, causes the relay to close the NO contact with
-  if(state.valid){    
-      digitalWrite( ESP8266_GPIO4, state.lampOn ); 
-      digitalWrite(LED_PIN, state.lampOn);
-  }else
-  {
-      digitalWrite( ESP8266_GPIO4, false ); 
-      digitalWrite(LED_PIN, false);
-  }
-}
-
-// toggle lamp to expected state
-void switchLamp(bool on){
-  bool toggle = (on && !emulator.getState().lampOn) || (!on && emulator.getState().lampOn);
-  if(toggle){
-    emulator.toggleLamp();
-  }    
-}
-
+//======================================================================================================================
+// Modbus Task
+//======================================================================================================================
 volatile unsigned long lastCall = 0;
 volatile unsigned long maxPeriod = 0;
 
@@ -78,18 +56,149 @@ void modBusPolling( void * parameter) {
   vTaskDelete(NULL);
 }
 
-
 TaskHandle_t modBusTask;
 
-// setup mcu
-void setup(){
-  
-  //setup modbus
-  RS485.begin(57600,SERIAL_8E1);
-  #ifdef SWAPUART
-  RS485.swap();  
-  #endif  
+//======================================================================================================================
+// Convert States
+//======================================================================================================================
+HACover::CoverState toCoverState(const SHCIState& doorState){
+  switch (doorState.doorState)
+  {
+  case DOOR_MOVE_OPENPOSITION:
+    return HACover::StateOpening;
+  case DOOR_MOVE_CLOSEPOSITION:
+    return HACover::StateClosing;
+  case DOOR_OPEN_POSITION:
+    return HACover::StateOpen;
+  case DOOR_CLOSE_POSITION:
+    return HACover::StateClosed;
+  case DOOR_HALF_POSITION:
+    return HACover::StateOpen;
+  default:
+    return HACover::StateStopped;
+  }
+}
 
+const char* doorStateToStr(const SHCIState& doorState){
+  switch (doorState.doorState)
+  {
+  case DOOR_MOVE_OPENPOSITION:
+    return "opening";
+  case DOOR_MOVE_CLOSEPOSITION:
+    return "closing";
+  case DOOR_OPEN_POSITION:
+    return "open";
+  case DOOR_CLOSE_POSITION:
+    return "closed";
+  case DOOR_HALF_POSITION:
+    return "ventilation";
+  default:
+    return "stopped";
+  }
+}
+
+//======================================================================================================================
+// Events
+//======================================================================================================================
+uint8_t publishDelayCounter = 0;
+uint8_t lastDoorState = 255;
+bool lightstate = false;
+void onStatusChanged(const SHCIState& state){
+  if(state.valid){
+    // Publish every 5 position changes to prevent modbus timeout
+    if (publishDelayCounter == 5){
+      garagedoor.setPosition((uint8_t)round(state.doorCurrentPosition/2));
+      publishDelayCounter = 0;
+    }
+    // Publish only if doorstate changes to prevent modbus timeout
+    if (lastDoorState != state.doorState){
+      doorstate.setValue(doorStateToStr(state));
+      garagedoor.setPosition((uint8_t)round(state.doorCurrentPosition/2));
+    }
+    if (lightstate != state.lampOn){
+      light.setState(state.lampOn);
+      lightstate = state.lampOn;
+    }
+    garagedoor.setState(toCoverState(state));
+    publishDelayCounter += 1;
+  }else
+  {
+    hcistatus.setValue("disconnected");
+  }
+}
+
+void onCoverCommand(HACover::CoverCommand cmd, HACover* sender) {
+    if (cmd == HACover::CommandOpen) {
+        emulator.openDoor();
+        // sender->setState(HACover::StateOpening); // report state back to the HA
+    } else if (cmd == HACover::CommandClose) {
+        emulator.closeDoor();
+        // sender->setState(HACover::StateClosing); // report state back to the HA
+    } else if (cmd == HACover::CommandStop) {
+        emulator.stopDoor();
+        // sender->setState(HACover::StateStopped); // report state back to the HA
+    }
+}
+
+void onButtonCommand(HAButton* sender)
+{
+    if (sender == &button) {
+        emulator.openDoorHalf();
+    }
+}
+
+void onSwitchCommand(bool state, HASwitch* sender)
+{
+  emulator.toggleLamp();
+  sender->setState(state); // report state back to the Home Assistant
+  lightstate = state;
+}
+
+//======================================================================================================================
+// Setups
+//======================================================================================================================
+void setup_wifi() {
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+  }
+}
+
+void setup_device(){
+  device.setName("Hoermann Supramatic 4");
+  device.setSoftwareVersion("1.0.0");
+  device.setManufacturer("Custom");
+  device.setModel("ESP32");
+  device.enableSharedAvailability();
+  device.enableLastWill();
+
+  garagedoor.setName("Garage Door");
+  garagedoor.setDeviceClass("shutter");
+  garagedoor.setCurrentPosition(round(emulator.getState().doorCurrentPosition/2));
+  garagedoor.onCommand(onCoverCommand);
+
+  button.setIcon("mdi:air-filter");
+  button.setName("Ventilation");
+  button.onCommand(onButtonCommand);
+
+  light.setIcon("mdi:lightbulb");
+  light.setName("Garage Light");
+  light.onCommand(onSwitchCommand);
+
+  hcistatus.setIcon("mdi:home");
+  hcistatus.setName("HCI-Bridge");
+  hcistatus.setValue("disconnected");
+
+  doorstate.setName("Door state");
+}
+
+void setup_mqtt(){
+  mqtt.begin(BROKER_ADDR, mqtt_port, mqtt_username, mqtt_pass);
+}
+
+void setup(){
+
+  RS485.begin(57600,SERIAL_8E1,PIN_RXD,PIN_TXD);
 
   xTaskCreatePinnedToCore(
       modBusPolling, /* Function to implement the task */
@@ -101,102 +210,21 @@ void setup(){
       &modBusTask,  /* Task handle. */
       1); /* Core where the task should run */
 
+  setup_wifi();
 
-  //setup wifi
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  WiFi.setAutoReconnect(true);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(100);
-  }
+  setup_device();
 
-  // setup http server
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    AsyncWebServerResponse *response = request->beginResponse_P( 200, "text/html", index_html,sizeof(index_html));
-    response->addHeader("Content-Encoding","deflate");    
-    request->send(response);
-  }); 
+  setup_mqtt();
 
-  server.on("/status", HTTP_GET, [](AsyncWebServerRequest *request){
-    const SHCIState& doorstate = emulator.getState();
-    AsyncResponseStream *response = request->beginResponseStream("application/json");
-    DynamicJsonDocument root(1024);
-    root["valid"] = doorstate.valid;
-    root["doorstate"] = doorstate.doorState;
-    root["doorposition"] = doorstate.doorCurrentPosition;
-    root["doortarget"] = doorstate.doorTargetPosition;
-    root["lamp"] = doorstate.lampOn;
-    root["debug"] = doorstate.reserved;
-    root["lastresponse"] = emulator.getMessageAge()/1000;    
-    root["looptime"] = maxPeriod;    
-
-    lastCall = maxPeriod = 0;
-    
-    serializeJson(root,*response);
-    request->send(response);
-  }); 
-
-  server.on("/command", HTTP_GET, [] (AsyncWebServerRequest *request) {    
-    if (request->hasParam("action")) {
-      int actionid = request->getParam("action")->value().toInt();
-      switch (actionid){
-      case 0:
-          emulator.closeDoor();
-        break;
-      case 1:
-          emulator.openDoor();
-          break;
-      case 2:
-          emulator.stopDoor();
-          break;
-      case 3:
-          emulator.ventilationPosition();
-          break;
-      case 4:
-          emulator.openDoorHalf();
-          break;
-      case 5:
-          emulator.toggleLamp();
-          break;      
-      default:
-        break;
-      }
-    }
-    request->send(200, "text/plain", "OK");
-  });
-
-  server.on("/sysinfo", HTTP_GET, [] (AsyncWebServerRequest *request) {      
-  
-    AsyncResponseStream *response = request->beginResponseStream("application/json");
-    DynamicJsonDocument root(1024);
-    root["freemem"] = ESP.getFreeHeap();    
-    root["hostname"] = WiFi.getHostname();
-    root["ip"] = WiFi.localIP().toString();
-    root["ssid"] = String(ssid);
-    root["wifistatus"] = WiFi.status();
-    root["resetreason"] =esp_reset_reason();    
-    serializeJson(root,*response);
-
-    request->send(response);    
-  });
-
-  AsyncElegantOTA.begin(&server);
-  
-  server.begin();
-
-  //setup relay board
-#ifdef USERELAY
-  pinMode( ESP8266_GPIO4, OUTPUT );       // Relay control pin.
-  pinMode( ESP8266_GPIO5, INPUT_PULLUP ); // Input pin.
-  pinMode( LED_PIN, OUTPUT );             // ESP8266 module blue L
-  digitalWrite( ESP8266_GPIO4, 0 );
-  digitalWrite(LED_PIN,0);
   emulator.onStatusChanged(onStatusChanged);
-#endif
-  
+
+  hcistatus.setValue(emulator.getState().valid ? "connected" : "disconnected");
+
 }
 
+//======================================================================================================================
 // mainloop
+//======================================================================================================================
 void loop(){     
-  AsyncElegantOTA.loop();
+  mqtt.loop();
 }
