@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include "hciemulator.h"
-#include <ArduinoHA.h> // https://github.com/dawidchyrzynski/arduino-home-assistant 
+#include <ArduinoHA.h> // https://github.com/dawidchyrzynski/arduino-home-assistant
 #include <math.h>
 
 /* create this file and add your wlan and mqtt credentials
