@@ -13,8 +13,6 @@
 */
 #include "../../../private/credentials.h"
 
-//#define DEBUG
-
 //======================================================================================================================
 // HA Device Parameter
 //======================================================================================================================
@@ -105,12 +103,12 @@ uint8_t lastDoorState = 255;
 bool lightstate = false;
 void onStatusChanged(const SHCIState& state){
   if(state.valid){
-    // Publish every 5 position changes to prevent modbus timeout
+    // Publish every 5th position change to prevent Modbus timeouts
     if (publishDelayCounter == 5){
       garagedoor.setPosition((uint8_t)round(state.doorCurrentPosition/2));
       publishDelayCounter = 0;
     }
-    // Publish only if doorstate changes to prevent modbus timeout
+    // Publish doorstate only if it has changed to prevent modbus timeouts
     if (lastDoorState != state.doorState){
       doorstate.setValue(doorStateToStr(state));
       garagedoor.setPosition((uint8_t)round(state.doorCurrentPosition/2));
@@ -158,7 +156,9 @@ void onSwitchCommand(bool state, HASwitch* sender)
 // Setups
 //======================================================================================================================
 void setup_wifi() {
+  WiFi.setHostname("HCP-Bridge");
   WiFi.begin(ssid, password);
+  WiFi.setAutoReconnect(true);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
   }
@@ -186,7 +186,7 @@ void setup_device(){
   light.onCommand(onSwitchCommand);
 
   hcistatus.setIcon("mdi:home");
-  hcistatus.setName("HCI-Bridge");
+  hcistatus.setName("HCP-Bridge");
   hcistatus.setValue("disconnected");
 
   doorstate.setName("Door state");
@@ -225,11 +225,6 @@ void setup(){
 //======================================================================================================================
 // mainloop
 //======================================================================================================================
-void loop(){     
+void loop(){
   mqtt.loop();
-  
-  if (WiFi.status() != WL_CONNECTED){
-    WiFi.disconnect();
-    WiFi.reconnect();
-  }
 }
