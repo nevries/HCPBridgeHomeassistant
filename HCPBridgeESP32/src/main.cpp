@@ -16,7 +16,7 @@
 //======================================================================================================================
 // HA Device Parameter
 //======================================================================================================================
-#define BROKER_ADDR IPAddress(192,168,178,50)
+#define BROKER_ADDR IPAddress(192,168,178,50) // MQTT Broker Address
 WiFiClient client;
 HADevice device("Supramatic4");
 HAMqtt mqtt(client, device);
