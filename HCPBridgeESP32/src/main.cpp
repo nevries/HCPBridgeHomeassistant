@@ -152,13 +152,19 @@ void onSwitchCommand(bool state, HASwitch* sender)
   lightstate = state;
 }
 
+void Wifi_disconnected(WiFiEvent_t event, WiFiEventInfo_t info){
+  WiFi.disconnect(true);
+  WiFi.begin(ssid, password);
+}
+
 //======================================================================================================================
 // Setups
 //======================================================================================================================
 void setup_wifi() {
   WiFi.setHostname("HCP-Bridge");
   WiFi.begin(ssid, password);
-  WiFi.setAutoReconnect(true);
+  //WiFi.setAutoReconnect(true);
+  WiFi.onEvent(Wifi_disconnected, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED); //SYSTEM_EVENT_STA_DISCONNECTED
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
   }
