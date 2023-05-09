@@ -16,9 +16,10 @@
 //======================================================================================================================
 // HA Device Parameter
 //======================================================================================================================
-#define BROKER_ADDR IPAddress(192,168,178,50) // MQTT Broker Address
+#define BROKER_ADDR IPAddress(192,168,178,37) // MQTT Broker Address
+int mqtt_port = 1883;
 WiFiClient client;
-HADevice device("Supramatic4");
+HADevice device("Promatic4");
 HAMqtt mqtt(client, device);
 
 HACover garagedoor("garagedoor", HACover::PositionFeature);
@@ -171,7 +172,7 @@ void setup_wifi() {
 }
 
 void setup_device(){
-  device.setName("Hoermann Supramatic 4");
+  device.setName("Hoermann Promatic 4");
   device.setSoftwareVersion("1.0.0");
   device.setManufacturer("Custom");
   device.setModel("ESP32");
@@ -199,7 +200,7 @@ void setup_device(){
 }
 
 void setup_mqtt(){
-  mqtt.begin(BROKER_ADDR, mqtt_port, mqtt_username, mqtt_pass);
+  mqtt.begin(BROKER_ADDR, mqtt_port);
 }
 
 void setup(){
