@@ -3,6 +3,8 @@
 #include "hciemulator.h"
 #include <ArduinoHA.h> // https://github.com/dawidchyrzynski/arduino-home-assistant
 #include <math.h>
+#include <Adafruit_Sensor.h>
+#include <DHT.h>
 
 /* create this file and add your wlan and mqtt credentials
   const char* ssid = "MyWLANSID";
@@ -13,6 +15,12 @@
 */
 #include "../../../private/credentials.h"
 
+#define DHT_PIN 12
+#define DHT_VCC_PIN 14
+#define DHTTYPE DHT22
+#define DELAY_BETWEEN_TEMP_READINGS (10 * 60 * 1000)
+DHT dht(DHT_PIN, DHTTYPE);
+
 //======================================================================================================================
 // HA Device Parameter
 //======================================================================================================================
@@ -20,13 +28,16 @@
 int mqtt_port = 1883;
 WiFiClient client;
 HADevice device("Promatic4");
-HAMqtt mqtt(client, device);
+HAMqtt mqtt(client, device, 8);
 
 HACover garagedoor("garagedoor", HACover::PositionFeature);
 HAButton button("ventilation");
 HASwitch light("garagelight");
 HASensor hcistatus("hcistatus");
 HASensor doorstate("doorstate");
+
+HASensorNumber tempSensor("temperature", HASensorNumber::PrecisionP1);
+HASensorNumber humiditySensor("humidity", HASensorNumber::PrecisionP1);
 
 //======================================================================================================================
 // UART and HCI-Emulator Parameter
@@ -185,7 +196,7 @@ void setup_device(){
   garagedoor.onCommand(onCoverCommand);
 
   button.setIcon("mdi:air-filter");
-  button.setName("Ventilation");
+  button.setName("Garage Ventilation");
   button.onCommand(onButtonCommand);
 
   light.setIcon("mdi:lightbulb");
@@ -197,6 +208,14 @@ void setup_device(){
   hcistatus.setValue("disconnected");
 
   doorstate.setName("Door state");
+
+  tempSensor.setIcon("mdi:thermometer");
+  tempSensor.setName("Garage Temperature");
+  tempSensor.setUnitOfMeasurement("°C");
+
+  humiditySensor.setIcon("mdi:water-percent");
+  humiditySensor.setName("Garage Humidity");
+  humiditySensor.setUnitOfMeasurement("%");
 }
 
 void setup_mqtt(){
@@ -221,17 +240,27 @@ void setup(){
 
   setup_device();
 
+  pinMode(DHT_VCC_PIN, OUTPUT);
+  digitalWrite(DHT_VCC_PIN, HIGH);
+  dht.begin();
+
   setup_mqtt();
 
   emulator.onStatusChanged(onStatusChanged);
 
   hcistatus.setValue(emulator.getState().valid ? "connected" : "disconnected");
-
 }
 
 //======================================================================================================================
 // mainloop
 //======================================================================================================================
+unsigned long lastTempUpdate = 0;
+
 void loop(){
   mqtt.loop();
+  if((millis() - lastTempUpdate) > (DELAY_BETWEEN_TEMP_READINGS)) {
+    tempSensor.setValue(dht.readTemperature());
+    humiditySensor.setValue(dht.readHumidity());
+    lastTempUpdate = millis();
+  }
 }
