@@ -16,8 +16,9 @@ static const char* TAG = "main";
 */
 #include "../../../private/credentials.h"
 
-#define DHT_PIN 12
-#define DHT_VCC_PIN 14
+#define DHT_PIN 33
+#define DHT_GND_PIN 13
+#define DHT_VCC_PIN 32
 #define DHTTYPE DHT22
 #define DELAY_BETWEEN_TEMP_READINGS (10 * 60 * 1000)
 DHT dht(DHT_PIN, DHTTYPE);
@@ -249,6 +250,9 @@ void setup(){
   setup_device();
   ESP_LOGI(TAG, "Device started");
 
+  // power DHT22 by digital pins and start it
+  pinMode(DHT_GND_PIN, OUTPUT);
+  digitalWrite(DHT_GND_PIN, LOW);
   pinMode(DHT_VCC_PIN, OUTPUT);
   digitalWrite(DHT_VCC_PIN, HIGH);
   dht.begin();
@@ -270,8 +274,12 @@ unsigned long lastTempUpdate = 0;
 void loop(){
   mqtt.loop();
   if((millis() - lastTempUpdate) > (DELAY_BETWEEN_TEMP_READINGS)) {
-    tempSensor.setValue(dht.readTemperature());
-    humiditySensor.setValue(dht.readHumidity());
+    ESP_LOGD(TAG, "Try to read DHT22...");
+    float temp = dht.readTemperature();
+    float hum = dht.readHumidity();
+    tempSensor.setValue(temp);
+    humiditySensor.setValue(hum);
     lastTempUpdate = millis();
+    ESP_LOGD(TAG, "DHT22 read temp: %.2f hum: %.2f", temp, hum);
   }
 }
