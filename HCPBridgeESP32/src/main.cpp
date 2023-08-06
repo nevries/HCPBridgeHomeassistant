@@ -33,8 +33,9 @@ HADevice device("Promatic4");
 HAMqtt mqtt(client, device, 8);
 
 HACover garagedoor("garagedoor", HACover::PositionFeature);
-HAButton button("ventilation");
-HASwitch light("garagelight");
+HAButton ventilationButton("ventilation");
+//HAButton halfButton("half");
+HALight light("garagelight");
 HASensor hcistatus("hcistatus");
 HASensor doorstate("doorstate");
 
@@ -153,16 +154,27 @@ void onCoverCommand(HACover::CoverCommand cmd, HACover* sender) {
     }
 }
 
-void onButtonCommand(HAButton* sender)
+// void onHalfButtonCommand(HAButton* sender)
+// {
+//     if (sender == &halfButton) {
+//         emulator.openDoorHalf();
+//     }
+// }
+
+void onVentilationButtonCommand(HAButton* sender)
 {
-    if (sender == &button) {
+    if (sender == &ventilationButton) {
         emulator.openDoorHalf();
     }
 }
 
-void onSwitchCommand(bool state, HASwitch* sender)
+void onLightCommand(bool state, HALight* sender)
 {
-  emulator.toggleLamp();
+  if (state) {
+    emulator.turnOnLamp();
+  } else {
+    emulator.turnOffLamp();
+  }
   sender->setState(state); // report state back to the Home Assistant
   lightstate = state;
 }
@@ -201,13 +213,17 @@ void setup_device(){
   garagedoor.setCurrentPosition(round(emulator.getState().doorCurrentPosition/2));
   garagedoor.onCommand(onCoverCommand);
 
-  button.setIcon("mdi:air-filter");
-  button.setName("Garage Ventilation");
-  button.onCommand(onButtonCommand);
+  ventilationButton.setIcon("mdi:air-filter");
+  ventilationButton.setName("Garagentor Lüften");
+  ventilationButton.onCommand(onVentilationButtonCommand);
 
-  light.setIcon("mdi:lightbulb");
-  light.setName("Garage Light");
-  light.onCommand(onSwitchCommand);
+  // halfButton.setIcon("mdi:car-sports");
+  // halfButton.setName("Garagentor Durchfahren");
+  // halfButton.onCommand(onHalfButtonCommand);
+
+  //light.setIcon("mdi:lightbulb");
+  light.setName("Garagentor Licht");
+  light.onStateCommand(onLightCommand);
 
   hcistatus.setIcon("mdi:home");
   hcistatus.setName("HCP-Bridge");
