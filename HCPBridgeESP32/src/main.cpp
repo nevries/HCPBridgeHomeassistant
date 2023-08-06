@@ -14,19 +14,22 @@ static const char* TAG = "main";
   const char* mqtt_pass       = "PASSWORD";
   const uint16_t mqtt_port    = 1883;
 */
+#include "../../../private.h"
+
 #define HOSTNAME "HCP-Bridge"
 
 #define DHT_PIN 33
 #define DHT_GND_PIN 13
 #define DHT_VCC_PIN 32
 #define DHTTYPE DHT22
-#define DELAY_BETWEEN_TEMP_READINGS (10 * 60 * 1000)
+#define DELAY_BETWEEN_TEMP_READINGS (5 * 60 * 1000)
 DHT dht(DHT_PIN, DHTTYPE);
 
 //======================================================================================================================
 // HA Device Parameter
 //======================================================================================================================
-#define BROKER_ADDR IPAddress(192,168,178,37) // MQTT Broker Address
+#define BROKER_ADDR IPAddress(192,168,188,4) // MQTT Broker Address
+// 192.168.188.4
 int mqtt_port = 1883;
 WiFiClient client;
 HADevice device("Promatic4");
@@ -181,6 +184,8 @@ void onLightCommand(bool state, HALight* sender)
 
 void Wifi_disconnected(WiFiEvent_t event, WiFiEventInfo_t info){
   WiFi.disconnect(true);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+}
 
 void Wifi_connected(WiFiEvent_t event, WiFiEventInfo_t info){
   ESP_LOGI(TAG, "Wifi %s : %s connected!", info.wifi_sta_connected.ssid, info.wifi_sta_connected.bssid);
@@ -191,7 +196,7 @@ void Wifi_connected(WiFiEvent_t event, WiFiEventInfo_t info){
 //======================================================================================================================
 void setup_wifi() {
   WiFi.setHostname(HOSTNAME);
-  WiFi.begin(ssid, password);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   //WiFi.setAutoReconnect(true);
   WiFi.onEvent(Wifi_connected, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_CONNECTED);
   WiFi.onEvent(Wifi_disconnected, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED); //SYSTEM_EVENT_STA_DISCONNECTED
@@ -203,12 +208,12 @@ void setup_wifi() {
 void setup_device(){
   device.setName("Hoermann Promatic 4");
   device.setSoftwareVersion("1.0.0");
-  device.setManufacturer("Custom");
+  device.setManufacturer("Ragnar's Inc");
   device.setModel("ESP32");
   device.enableSharedAvailability();
   device.enableLastWill();
 
-  garagedoor.setName("Garage Door");
+  garagedoor.setName("Garagentor");
   garagedoor.setDeviceClass("shutter");
   garagedoor.setCurrentPosition(round(emulator.getState().doorCurrentPosition/2));
   garagedoor.onCommand(onCoverCommand);
@@ -232,16 +237,16 @@ void setup_device(){
   doorstate.setName("Door state");
 
   tempSensor.setIcon("mdi:thermometer");
-  tempSensor.setName("Garage Temperature");
+  tempSensor.setName("Garage Temperatur");
   tempSensor.setUnitOfMeasurement("°C");
 
   humiditySensor.setIcon("mdi:water-percent");
-  humiditySensor.setName("Garage Humidity");
+  humiditySensor.setName("Garage Luftfeuchte");
   humiditySensor.setUnitOfMeasurement("%");
 }
 
 void setup_mqtt(){
-  mqtt.begin(BROKER_ADDR, mqtt_port);
+  mqtt.begin(BROKER_ADDR, mqtt_port, MQTT_USER, MQTT_PASSWORD);
 }
 
 void setup(){
@@ -294,7 +299,7 @@ void setup(){
 //======================================================================================================================
 unsigned long lastTempUpdate = 0;
 
-void loop(){
+void loop(){  
   mqtt.loop();
   if((millis() - lastTempUpdate) > (DELAY_BETWEEN_TEMP_READINGS)) {
     ESP_LOGD(TAG, "Try to read DHT22...");
