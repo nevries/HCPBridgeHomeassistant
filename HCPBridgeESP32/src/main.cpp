@@ -14,7 +14,7 @@ static const char* TAG = "main";
   const char* mqtt_pass       = "PASSWORD";
   const uint16_t mqtt_port    = 1883;
 */
-#include "../../../private/credentials.h"
+#define HOSTNAME "HCP-Bridge"
 
 #define DHT_PIN 33
 #define DHT_GND_PIN 13
@@ -177,7 +177,7 @@ void Wifi_connected(WiFiEvent_t event, WiFiEventInfo_t info){
 // Setups
 //======================================================================================================================
 void setup_wifi() {
-  WiFi.setHostname("HCP-Bridge");
+  WiFi.setHostname(HOSTNAME);
   WiFi.begin(ssid, password);
   //WiFi.setAutoReconnect(true);
   WiFi.onEvent(Wifi_connected, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_CONNECTED);
