@@ -47,6 +47,7 @@ HASensorNumber humiditySensor("humidity", HASensorNumber::PrecisionP1);
 #define RS485 Serial2
 #define PIN_TXD 17 // UART 2 TXT - G17
 #define PIN_RXD 16 // UART 2 RXD - G16
+#define BUILTIN_LED 2
 
 HCIEmulator emulator(&RS485);
 
@@ -228,6 +229,9 @@ void setup_mqtt(){
 }
 
 void setup(){
+  // internal LED on while setting up things
+  pinMode(BUILTIN_LED, OUTPUT);
+  digitalWrite(BUILTIN_LED, HIGH);
 
   ESP_LOGI(TAG, "Setup started");
 
@@ -264,6 +268,9 @@ void setup(){
   emulator.onStatusChanged(onStatusChanged);
 
   hcistatus.setValue(emulator.getState().valid ? "connected" : "disconnected");
+
+  // setup done, internal LED off
+  digitalWrite(BUILTIN_LED, LOW);
 }
 
 //======================================================================================================================
