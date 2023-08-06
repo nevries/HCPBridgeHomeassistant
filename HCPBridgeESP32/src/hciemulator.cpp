@@ -1,8 +1,8 @@
+static const char* TAG = "hciemulator";
 #include "hciemulator.h"
 #define CHECKCHANGEDSET(Target,Value,Flag) if((Target)!=(Value)){Target=Value;Flag=true;}
 int hciloglevel = DEFAULTLOGLEVEL;
 
-#ifdef SOFTSERIAL
 #define Log(Level,Message) LogCore(Level,Message)
 #define Log3(Level,Message,Buffer, Len) LogCore(Level,Message,Buffer,Len)
 //LOGLEVEL
@@ -17,15 +17,30 @@ void LogCore(int Level, const char* msg, const unsigned char * data=NULL, size_t
             snprintf(str,sizeof(str),"%02x ", data[i]);
             newmsg+=str;
         }
-        Serial.println(newmsg);        
-    }else{
-        Serial.println(msg);
+        msg = newmsg.c_str();        
+    }
+    switch (Level)
+    {
+    case LL_ERROR:
+        ESP_LOGE(TAG, "%s", msg);
+        break;
+    
+    case LL_WARN:
+        ESP_LOGW(TAG, "%s", msg);
+        break;
+    
+    case LL_INFO:
+        ESP_LOGI(TAG, "%s", msg);
+        break;
+    
+    case LL_DEBUG:
+        ESP_LOGD(TAG, "%s", msg);
+        break;
+
+    default:
+        break;
     }
 }
-#else 
-    #define Log(Level,Message) 
-    #define Log3(Level,Message,Buffer, Len) 
-#endif
 
 
 int HCIEmulator::getLogLevel(){

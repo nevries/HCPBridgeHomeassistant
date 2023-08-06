@@ -1,3 +1,4 @@
+static const char* TAG = "main";
 #include <Arduino.h>
 #include <WiFi.h>
 #include "hciemulator.h"
@@ -166,7 +167,9 @@ void onSwitchCommand(bool state, HASwitch* sender)
 
 void Wifi_disconnected(WiFiEvent_t event, WiFiEventInfo_t info){
   WiFi.disconnect(true);
-  WiFi.begin(ssid, password);
+
+void Wifi_connected(WiFiEvent_t event, WiFiEventInfo_t info){
+  ESP_LOGI(TAG, "Wifi %s : %s connected!", info.wifi_sta_connected.ssid, info.wifi_sta_connected.bssid);
 }
 
 //======================================================================================================================
@@ -176,6 +179,7 @@ void setup_wifi() {
   WiFi.setHostname("HCP-Bridge");
   WiFi.begin(ssid, password);
   //WiFi.setAutoReconnect(true);
+  WiFi.onEvent(Wifi_connected, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_CONNECTED);
   WiFi.onEvent(Wifi_disconnected, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED); //SYSTEM_EVENT_STA_DISCONNECTED
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -224,6 +228,8 @@ void setup_mqtt(){
 
 void setup(){
 
+  ESP_LOGI(TAG, "Setup started");
+
   RS485.begin(57600,SERIAL_8E1,PIN_RXD,PIN_TXD);
 
   xTaskCreatePinnedToCore(
@@ -235,16 +241,21 @@ void setup(){
       configMAX_PRIORITIES -1,
       &modBusTask,  /* Task handle. */
       1); /* Core where the task should run */
+  ESP_LOGI(TAG, "RS485 task started");
 
   setup_wifi();
+  ESP_LOGI(TAG, "Wifi started");
 
   setup_device();
+  ESP_LOGI(TAG, "Device started");
 
   pinMode(DHT_VCC_PIN, OUTPUT);
   digitalWrite(DHT_VCC_PIN, HIGH);
   dht.begin();
+  ESP_LOGI(TAG, "DHT started");
 
   setup_mqtt();
+  ESP_LOGI(TAG, "MQTT started");
 
   emulator.onStatusChanged(onStatusChanged);
 
