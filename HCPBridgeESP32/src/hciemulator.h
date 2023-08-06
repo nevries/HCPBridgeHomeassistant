@@ -83,6 +83,8 @@ public:
     void closeDoor();
     void stopDoor();
     void toggleLamp();
+    void turnOnLamp();
+    void turnOffLamp();
     void ventilationPosition();
 
     const SHCIState& getState() {   

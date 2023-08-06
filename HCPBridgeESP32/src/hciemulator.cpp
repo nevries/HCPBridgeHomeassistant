@@ -415,6 +415,13 @@ void HCIEmulator::stopDoor(){
     if(m_statemachine != WAITING){
         return;
     }
+    // STARTSTOPDOOR actually would start a move if the door is not moving, which
+    // is not intended by a call to "stopDoor". Hence, we check for movement,
+    // anf if none, we won't trigger the command
+    if(!(m_state.doorState == DOOR_MOVE_CLOSEPOSITION || m_state.doorState == DOOR_MOVE_OPENPOSITION)){    
+        ESP_LOGD(TAG, "Close command while not moving");
+        return;
+    }
     m_lastStateTime = millis();    
     m_statemachine = STARTSTOPDOOR;
 }
@@ -425,6 +432,18 @@ void HCIEmulator::toggleLamp(){
     }
     m_lastStateTime = millis();
     m_statemachine = STARTTOGGLELAMP;
+}
+
+void HCIEmulator::turnOffLamp(){
+    if(m_state.lampOn) {
+        toggleLamp();
+    }
+}
+
+void HCIEmulator::turnOnLamp(){
+    if( ! m_state.lampOn) {
+        toggleLamp();
+    }
 }
 
 void HCIEmulator::ventilationPosition(){
