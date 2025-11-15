@@ -1,14 +1,19 @@
 # HCPBridge
-Emuliert ein Hörmann HAP 1 HCP auf dem ESP8622 bzw. ESP32 und Arduino.<br/>
+Emulates the Hörmann HAP 1 HCP on ESP32 hardware and publishes several entities to monitor and control the garage door to [home assistant](https://www.home-assistant.io).
+Optionally, it connects to a DHT11 or DHT22 sensor to also report temperature and humidity.
 
-**Kompatible Torantriebe (HCP2-Bus - Modbus):**
+Emuliert das Hörmann HAP 1 HCP auf ESP32 Hardware und stellt das Tor über mehrere Entitäten in [Home Assistant](https://www.home-assistant.io) bereit.
+Optional kann noch ein DHT11 oder DHT22 Sensor zur Temperatur- und Luftfeuchtigkeitsmessung angeschlossen werden.
+
+Credits to TODO
+
+## Compatible Hörmann Garage Door Openers
 - SupraMatic E/P Serie 4
 - ProMatic Serie 4
 
-Bitte beachten, das Projekt emuliert UAP 1 **HCP** und ist auch **nur** mit der Serie 4 kompatibel! Ältere Antriebe als Serie 4 haben eine andere Pinbelegung und ein komplett anderes Protokoll.<p/>
+Please note that this project only emulates UAP 1 **HCP** and, hence, is **only** compatible with series 4 Hörmann hardware. Older models use a different pinout and protocol.
 
-Eigentlich war das Ziel, die Steuerung komplett nur mit einem ESP8266 zu realisieren, allerdings gibt es durch die WLAN und TCP/IP-Stackumsetzung Timeoutprobleme, die zum Verbindungsabbruch zwischen dem Antrieb und der Steuerung führen können. Durch die ISR-Version konnte das Problem zwar reduziert aber nicht komplett ausgeschlossen werden. Daher gibt es zwei weitere Versionen, die bisher stabil laufen. Eine Variante nutzt den ESP32 statt ESP8266, welcher über 2 Kerne verfügt und so scheinbar besser mit WLAN-Verbindungsproblemen zurecht kommt. Die andere Option ist ein zweiter MCU, der die MODBUS Simulation übernimmt, sodass sich der ESP8266 nur noch um die Netzwerkkommunikation und das WebInterface kümmern muss.
-
+Bitte beachten, das Projekt emuliert UAP 1 **HCP** und ist auch **nur** mit der Serie 4 kompatibel! Ältere Antriebe als Serie 4 haben eine andere Pinbelegung und ein komplett anderes Protokoll.
 
 
 ## Funktionen:
