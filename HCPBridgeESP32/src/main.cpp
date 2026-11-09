@@ -196,6 +196,9 @@ void Wifi_connected(WiFiEvent_t event, WiFiEventInfo_t info){
 //======================================================================================================================
 void setup_wifi() {
   WiFi.setHostname(HOSTNAME);
+  // scan all channels and pick the strongest AP instead of the first one found
+  WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
+  WiFi.setSortMethod(WIFI_CONNECT_AP_BY_SIGNAL);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   //WiFi.setAutoReconnect(true);
   WiFi.onEvent(Wifi_connected, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_CONNECTED);
