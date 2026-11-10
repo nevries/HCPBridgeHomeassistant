@@ -141,9 +141,6 @@ void onStatusChanged(const SHCIState& state){
     }
     garagedoor.setState(toCoverState(state));
     publishDelayCounter += 1;
-  }else
-  {
-    hcistatus.setValue("disconnected");
   }
 }
 
@@ -276,7 +273,6 @@ void setup_device(){
 
   hcistatus.setIcon("mdi:home");
   hcistatus.setName("HCP-Bridge");
-  hcistatus.setValue("disconnected");
 
   doorstate.setName("Door state");
 
@@ -337,8 +333,6 @@ void setup(){
 
   emulator.onStatusChanged(onStatusChanged);
 
-  hcistatus.setValue(emulator.getState().valid ? "connected" : "disconnected");
-
   // setup done, internal LED off
   digitalWrite(BUILTIN_LED, LOW);
 }
@@ -346,12 +340,19 @@ void setup(){
 //======================================================================================================================
 // mainloop
 //======================================================================================================================
+
 unsigned long lastTempUpdate = 0;
 
 void loop(){  
   server.handleClient();
   ElegantOTA.loop();
   mqtt.loop();
+  // publish bus status from the main loop once MQTT is up (setValue before connect is silently dropped)
+  static int8_t lastHciValid = -1;
+  int8_t hciValid = emulator.getState().valid;
+  if (hciValid != lastHciValid && mqtt.isConnected() && hcistatus.setValue(hciValid ? "connected" : "disconnected")) {
+    lastHciValid = hciValid;
+  }
   if((millis() - lastTempUpdate) > (DELAY_BETWEEN_TEMP_READINGS)) {
     ESP_LOGD(TAG, "Try to read DHT22...");
     float temp = dht.readTemperature();
