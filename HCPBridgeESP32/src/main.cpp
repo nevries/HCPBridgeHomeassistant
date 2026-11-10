@@ -187,6 +187,8 @@ void onLightCommand(bool state, HALight* sender)
 // Status endpoint: GET /status -> JSON with WiFi state and the last WiFi events
 //======================================================================================================================
 struct WifiEvent { uint32_t t; bool up; uint8_t reason; int8_t rssi; uint8_t ch; uint8_t bssid[6]; };
+unsigned long lastTempUpdate = 0;
+uint32_t dhtFailures = 0;
 WifiEvent wifiEvents[32]; // ring buffer, written from the WiFi event task; torn reads are harmless
 volatile uint32_t wifiEventCount = 0;
 
@@ -201,7 +203,7 @@ String mac2str(const uint8_t *m) { char b[18]; snprintf(b, sizeof b, "%02x:%02x:
 
 void handleStatus() {
   String s = "{\"uptime_s\":" + String(millis() / 1000) + ",\"reset_reason\":" + String((int)esp_reset_reason()) +
-    ",\"free_heap\":" + String(ESP.getFreeHeap()) + ",\"min_free_heap\":" + String(ESP.getMinFreeHeap()) +
+    ",\"dht_failures\":" + String(dhtFailures) + ",\"free_heap\":" + String(ESP.getFreeHeap()) + ",\"min_free_heap\":" + String(ESP.getMinFreeHeap()) +
     ",\"sketch_md5\":\"" + ESP.getSketchMD5() + "\",\"connected\":" + (WiFi.isConnected() ? "true" : "false") +
     ",\"ssid\":\"" + WiFi.SSID() + "\",\"bssid\":\"" + WiFi.BSSIDstr() + "\",\"channel\":" + String(WiFi.channel()) +
     ",\"rssi\":" + String(WiFi.RSSI()) + ",\"ip\":\"" + WiFi.localIP().toString() + "\",\"wifi_events_total\":" + String(wifiEventCount) +
@@ -341,8 +343,6 @@ void setup(){
 // mainloop
 //======================================================================================================================
 
-unsigned long lastTempUpdate = 0;
-
 void loop(){  
   server.handleClient();
   ElegantOTA.loop();
@@ -357,8 +357,12 @@ void loop(){
     ESP_LOGD(TAG, "Try to read DHT22...");
     float temp = dht.readTemperature();
     float hum = dht.readHumidity();
-    tempSensor.setValue(temp);
-    humiditySensor.setValue(hum);
+    if (isnan(temp) || isnan(hum)) {
+      dhtFailures++; // failed read: keep the last value in HA instead of publishing garbage
+    } else {
+      tempSensor.setValue(temp);
+      humiditySensor.setValue(hum);
+    }
     lastTempUpdate = millis();
     ESP_LOGD(TAG, "DHT22 read temp: %.2f hum: %.2f", temp, hum);
   }
