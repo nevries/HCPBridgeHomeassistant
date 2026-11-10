@@ -1,6 +1,8 @@
 static const char* TAG = "main";
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WebServer.h>
+#include <ElegantOTA.h>
 #include "hciemulator.h"
 #include <ArduinoHA.h> // https://github.com/dawidchyrzynski/arduino-home-assistant
 #include <math.h>
@@ -32,6 +34,7 @@ DHT dht(DHT_PIN, DHTTYPE);
 // 192.168.188.4
 int mqtt_port = 1883;
 WiFiClient client;
+WebServer server(80);
 HADevice device("Promatic4");
 HAMqtt mqtt(client, device, 8);
 
@@ -182,12 +185,50 @@ void onLightCommand(bool state, HALight* sender)
   lightstate = state;
 }
 
+
+//======================================================================================================================
+// Status endpoint: GET /status -> JSON with WiFi state and the last WiFi events
+//======================================================================================================================
+struct WifiEvent { uint32_t t; bool up; uint8_t reason; int8_t rssi; uint8_t ch; uint8_t bssid[6]; };
+WifiEvent wifiEvents[32]; // ring buffer, written from the WiFi event task; torn reads are harmless
+volatile uint32_t wifiEventCount = 0;
+
+void logWifiEvent(bool up, uint8_t reason, int8_t rssi, uint8_t ch, const uint8_t *bssid) {
+  WifiEvent &e = wifiEvents[wifiEventCount % 32];
+  e = {(uint32_t)(millis() / 1000), up, reason, rssi, ch, {0}};
+  memcpy(e.bssid, bssid, 6);
+  wifiEventCount++;
+}
+
+String mac2str(const uint8_t *m) { char b[18]; snprintf(b, sizeof b, "%02x:%02x:%02x:%02x:%02x:%02x", m[0], m[1], m[2], m[3], m[4], m[5]); return b; }
+
+void handleStatus() {
+  String s = "{\"uptime_s\":" + String(millis() / 1000) + ",\"reset_reason\":" + String((int)esp_reset_reason()) +
+    ",\"free_heap\":" + String(ESP.getFreeHeap()) + ",\"min_free_heap\":" + String(ESP.getMinFreeHeap()) +
+    ",\"sketch_md5\":\"" + ESP.getSketchMD5() + "\",\"connected\":" + (WiFi.isConnected() ? "true" : "false") +
+    ",\"ssid\":\"" + WiFi.SSID() + "\",\"bssid\":\"" + WiFi.BSSIDstr() + "\",\"channel\":" + String(WiFi.channel()) +
+    ",\"rssi\":" + String(WiFi.RSSI()) + ",\"ip\":\"" + WiFi.localIP().toString() + "\",\"wifi_events_total\":" + String(wifiEventCount) +
+    ",\"wifi_events\":[";
+  uint32_t n = wifiEventCount, first = n > 32 ? n - 32 : 0;
+  for (uint32_t i = first; i < n; i++) {
+    const WifiEvent &e = wifiEvents[i % 32];
+    if (i > first) s += ",";
+    s += String("{\"t\":") + e.t + ",\"ev\":\"" + (e.up ? "connected" : "disconnected") + "\",\"bssid\":\"" + mac2str(e.bssid) +
+      "\",\"ch\":" + (int)e.ch + ",\"rssi\":" + (int)e.rssi + ",\"reason\":" + (int)e.reason + "}";
+  }
+  server.send(200, "application/json", s + "]}");
+}
+
 void Wifi_disconnected(WiFiEvent_t event, WiFiEventInfo_t info){
+  const auto &d = info.wifi_sta_disconnected;
+  logWifiEvent(false, d.reason, d.rssi, 0, d.bssid);
   WiFi.disconnect(true);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 }
 
 void Wifi_connected(WiFiEvent_t event, WiFiEventInfo_t info){
+  const auto &c = info.wifi_sta_connected;
+  logWifiEvent(true, 0, 0, c.channel, c.bssid);
   ESP_LOGI(TAG, "Wifi %s : %s connected!", info.wifi_sta_connected.ssid, info.wifi_sta_connected.bssid);
 }
 
@@ -196,6 +237,9 @@ void Wifi_connected(WiFiEvent_t event, WiFiEventInfo_t info){
 //======================================================================================================================
 void setup_wifi() {
   WiFi.setHostname(HOSTNAME);
+  // scan all channels and pick the strongest AP (default fast scan takes the first one found)
+  WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
+  WiFi.setSortMethod(WIFI_CONNECT_AP_BY_SIGNAL);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   //WiFi.setAutoReconnect(true);
   WiFi.onEvent(Wifi_connected, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_CONNECTED);
@@ -286,6 +330,11 @@ void setup(){
   setup_mqtt();
   ESP_LOGI(TAG, "MQTT started");
 
+  server.on("/status", handleStatus);
+  ElegantOTA.begin(&server, OTA_USER, OTA_PASSWORD); // begin() would reset a prior setAuth()
+  server.begin();
+  ESP_LOGI(TAG, "OTA server started");
+
   emulator.onStatusChanged(onStatusChanged);
 
   hcistatus.setValue(emulator.getState().valid ? "connected" : "disconnected");
@@ -300,6 +349,8 @@ void setup(){
 unsigned long lastTempUpdate = 0;
 
 void loop(){  
+  server.handleClient();
+  ElegantOTA.loop();
   mqtt.loop();
   if((millis() - lastTempUpdate) > (DELAY_BETWEEN_TEMP_READINGS)) {
     ESP_LOGD(TAG, "Try to read DHT22...");
