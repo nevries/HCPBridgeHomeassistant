@@ -72,6 +72,8 @@ enum StateMachine: uint8_t{
 
 class HCIEmulator {
 public:
+    // bus diagnostics, read by /status; muteUntil (millis) suppresses responses for tests
+    volatile uint32_t txCount = 0, lastTx = 0, maxTxGap = 0, muteUntil = 0;
     typedef std::function<void(const SHCIState&)> callback_function_t;
 
     HCIEmulator(Stream * port);

@@ -203,6 +203,8 @@ String mac2str(const uint8_t *m) { char b[18]; snprintf(b, sizeof b, "%02x:%02x:
 
 void handleStatus() {
   String s = "{\"uptime_s\":" + String(millis() / 1000) + ",\"reset_reason\":" + String((int)esp_reset_reason()) +
+    ",\"bus_tx\":" + String(emulator.txCount) + ",\"bus_max_gap_ms\":" + String(emulator.maxTxGap) +
+    ",\"bus_last_tx_ms_ago\":" + String(millis() - emulator.lastTx) + ",\"bus_max_loop_us\":" + String(maxPeriod) +
     ",\"dht_failures\":" + String(dhtFailures) + ",\"free_heap\":" + String(ESP.getFreeHeap()) + ",\"min_free_heap\":" + String(ESP.getMinFreeHeap()) +
     ",\"sketch_md5\":\"" + ESP.getSketchMD5() + "\",\"connected\":" + (WiFi.isConnected() ? "true" : "false") +
     ",\"ssid\":\"" + WiFi.SSID() + "\",\"bssid\":\"" + WiFi.BSSIDstr() + "\",\"channel\":" + String(WiFi.channel()) +
@@ -250,7 +252,7 @@ void setup_wifi() {
 
 void setup_device(){
   device.setName("Hoermann Promatic 4");
-  device.setSoftwareVersion("1.0.0");
+  device.setSoftwareVersion("1.1.0");
   device.setManufacturer("Ragnar's Inc");
   device.setModel("ESP32");
   device.enableSharedAvailability();
@@ -278,12 +280,14 @@ void setup_device(){
 
   doorstate.setName("Door state");
 
-  tempSensor.setIcon("mdi:thermometer");
   tempSensor.setName("Garage Temperatur");
+  tempSensor.setDeviceClass("temperature");
+  tempSensor.setStateClass("measurement");
   tempSensor.setUnitOfMeasurement("°C");
 
-  humiditySensor.setIcon("mdi:water-percent");
   humiditySensor.setName("Garage Luftfeuchte");
+  humiditySensor.setDeviceClass("humidity");
+  humiditySensor.setStateClass("measurement");
   humiditySensor.setUnitOfMeasurement("%");
 }
 
@@ -329,6 +333,19 @@ void setup(){
   ESP_LOGI(TAG, "MQTT started");
 
   server.on("/status", handleStatus);
+  // GET /mute?ms=N (auth, door closed, N<=10000): stop answering the opener for N ms to find its timeout
+  server.on("/mute", []() {
+    if (!server.authenticate(OTA_USER, OTA_PASSWORD)) return server.requestAuthentication();
+    uint32_t ms = server.arg("ms").toInt();
+    if (ms == 0 || ms > 10000) return server.send(400, "text/plain", "ms must be 1..10000");
+    if (toCoverState(emulator.getState()) != HACover::StateClosed) return server.send(409, "text/plain", "door not closed");
+    emulator.muteUntil = millis() + ms;
+    server.send(200, "text/plain", "muted " + String(ms) + " ms");
+  });
+  // Flash writes stall the Modbus task; half/late answers make the opener reboot and kill the upload.
+  // Stay silent on the bus during OTA instead (opener only flags error 7, clear it by power-cycling it).
+  ElegantOTA.onStart([]() { emulator.muteUntil = millis() + 120000; });
+  ElegantOTA.onEnd([](bool ok) { if (!ok) emulator.muteUntil = 0; });
   ElegantOTA.begin(&server, OTA_USER, OTA_PASSWORD); // begin() would reset a prior setAuth()
   server.begin();
   ESP_LOGI(TAG, "OTA server started");

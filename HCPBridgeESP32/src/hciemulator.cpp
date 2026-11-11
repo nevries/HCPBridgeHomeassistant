@@ -154,7 +154,13 @@ void HCIEmulator::poll(){
 
                 //Log(LL_DEBUG, ("ST:"+String(m_lastSendTime)).c_str());
                 
-                m_port->write(m_txbuffer, m_txlen);
+                uint32_t now = millis();
+                if (!muteUntil || (int32_t)(muteUntil - now) <= 0) { // muted: drop response
+                    m_port->write(m_txbuffer, m_txlen);
+                    if (txCount) maxTxGap = _max(maxTxGap, now - lastTx);
+                    lastTx = now;
+                    txCount++;
+                }
                 Log3(LL_DEBUG,"Response: ", m_txbuffer, m_txlen);
                 m_txlen = 0;
             }                
